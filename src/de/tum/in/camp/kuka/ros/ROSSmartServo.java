@@ -22,6 +22,11 @@
  */
 
 package de.tum.in.camp.kuka.ros;
+import com.kuka.roboticsAPI.uiModel.userKeys.IUserKey;
+import com.kuka.roboticsAPI.uiModel.userKeys.IUserKeyBar;
+import com.kuka.roboticsAPI.uiModel.userKeys.IUserKeyListener;
+import com.kuka.roboticsAPI.uiModel.userKeys.UserKeyAlignment;
+import com.kuka.roboticsAPI.uiModel.userKeys.UserKeyEvent;
 
 // ROS imports
 import geometry_msgs.PoseStamped;
@@ -40,6 +45,7 @@ import org.ros.exception.ServiceException;
 import org.ros.node.NodeConfiguration;
 import org.ros.node.NodeMainExecutor;
 import org.ros.node.service.ServiceResponseBuilder;
+import org.ros.node.topic.Publisher;
 
 import com.kuka.connectivity.motionModel.smartServo.ServoMotion;
 import com.kuka.connectivity.motionModel.smartServo.SmartServo;
@@ -56,11 +62,21 @@ import com.kuka.roboticsAPI.motionModel.controlModeModel.PositionControlMode;
  * This application allows to command the robot using SmartServo motions.
  */
 public class ROSSmartServo extends ROSBaseApplication {
+	
+	// Gravity compensation keys for the SmartPad toolbar
+		private IUserKeyBar poseKeybar;
+		private IUserKey poseKey;
+		private IUserKeyListener poseKeyList;
+		private boolean buttonPushed = false;
+		
+		
 
 	private Lock configureSmartServoLock = new ReentrantLock();
 
 	private iiwaMessageGenerator helper; // Helper class to generate iiwa_msgs from current robot state.
 	private iiwaSubscriber subscriber; // IIWARos Subscriber.
+	protected iiwaPublisher publisher;
+
 
 	// Configuration of the subscriber ROS node.
 	private NodeConfiguration nodeConfSubscriber;
@@ -75,6 +91,7 @@ public class ROSSmartServo extends ROSBaseApplication {
 	
 	private ConfigureSmartServoRequest latestSmartServoRequest;
 
+	
 	@Override
 	protected void configureNodes(URI uri) {
 		// Configuration for the Subscriber.
@@ -158,13 +175,35 @@ public class ROSSmartServo extends ROSBaseApplication {
 		// Execute the subscriber node.
 		nodeMainExecutor.execute(subscriber, nodeConfSubscriber);
 	}
-
+	
 	@Override
 	protected void initializeApp() {
+		
+		
+		
 		helper = new iiwaMessageGenerator(iiwaConfiguration.getRobotName());
 		jp = new JointPosition(robot.getJointCount());
 		jv = new JointPosition(robot.getJointCount());
 		jointDisplacement = new JointPosition(robot.getJointCount());
+		
+		poseKeybar = getApplicationUI().createUserKeyBar("getPose");
+		poseKeyList = new IUserKeyListener() {
+			@Override
+			public void onKeyEvent(IUserKey poseKey,
+					com.kuka.roboticsAPI.uiModel.userKeys.UserKeyEvent event) {
+				if (event == UserKeyEvent.KeyDown) {
+						buttonPushed= true;
+						
+						publisher.publishButtonPressed(null);
+
+				} 
+			}
+
+
+		};
+		poseKey = poseKeybar.addUserKey(0, poseKeyList, true);
+		poseKey.setText(UserKeyAlignment.TopMiddle, "Got it!");
+		poseKeybar.publish();	
 	}
 
 	public static class UnsupportedControlModeException extends RuntimeException {
@@ -173,6 +212,7 @@ public class ROSSmartServo extends ROSBaseApplication {
 		public UnsupportedControlModeException(String message) { super(message); }
 		public UnsupportedControlModeException(String message, Throwable cause) { super(message, cause); }
 		public UnsupportedControlModeException(Throwable cause) { super(cause); }
+		
 	}
 	
 	/**
@@ -423,6 +463,11 @@ public class ROSSmartServo extends ROSBaseApplication {
 
 	@Override
 	protected void controlLoop() {
+		//Button hinzugefügt
+		if (buttonPushed) {
+					getLogger().warn("Hello there!");
+		}
+		//*********
 		if (subscriber.currentCommandType != null) {
 			configureSmartServoLock.lock();
 
@@ -495,4 +540,5 @@ public class ROSSmartServo extends ROSBaseApplication {
 			configureSmartServoLock.unlock();
 		}
 	}
+
 }
